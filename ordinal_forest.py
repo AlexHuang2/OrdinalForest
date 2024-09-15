@@ -7,48 +7,24 @@ from random import sample
 import heapq
 import threading
 
-from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble._forest import ForestClassifier
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.utils import check_random_state, check_array, column_or_1d
 from sklearn.utils.validation import check_is_fitted, _check_sample_weight
-from sklearn.utils.multiclass import check_classification_targets
+from sklearn.utils.multiclass import type_of_target
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import OneHotEncoder
 
 from joblib import Parallel, delayed
+from warnings import warn
 
-import numbers
-from warnings import catch_warnings, simplefilter, warn
-import threading
-
-from abc import ABCMeta, abstractmethod
-import numpy as np
 from scipy.sparse import issparse
-from scipy.sparse import hstack as sparse_hstack
-from joblib import Parallel
 
-from sklearn.base import BaseEstimator, ClassifierMixin, MultiOutputMixin, RegressorMixin, TransformerMixin, is_classifier
-from sklearn.metrics import accuracy_score, r2_score
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, ExtraTreeClassifier, ExtraTreeRegressor
 from sklearn.tree._tree import DTYPE, DOUBLE
-from sklearn.utils import check_random_state, compute_sample_weight, deprecated
+from sklearn.utils import check_random_state
 from sklearn.exceptions import DataConversionWarning
-from sklearn.ensemble import BaseEnsemble
 from sklearn.ensemble._forest import _partition_estimators
-from sklearn.utils.fixes import delayed
-from sklearn.utils.multiclass import check_classification_targets, type_of_target
-from sklearn.utils.validation import (
-    check_is_fitted,
-    _check_sample_weight,
-    _check_feature_names_in,
-    _num_samples
-)
 
 # You might need to implement or import these functions if they're not available
 from sklearn.ensemble._forest import (
-    _partition_estimators,
     _accumulate_prediction,
     _generate_unsampled_indices,
     _get_n_samples_bootstrap,
