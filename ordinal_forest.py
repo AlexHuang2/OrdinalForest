@@ -102,7 +102,6 @@ class OrdinalForestClassifier(ForestClassifier):
         self.z_intervals = None
         self.best_z_mapping = None
         self.best_z_interval = None
-        self.ordinal_fitted = None
         self.scoring_function = None
         self.oob_score = 'all-threshold'
         # A hyperparameter for the selection of the next candidate score set
@@ -196,8 +195,7 @@ class OrdinalForestClassifier(ForestClassifier):
         else:
             return all_proba
         
-    def fit(self, X, y, sample_weight=None):
-        # Some of these can be moved under "if not self.ordinal_fitted:" but keep here just to be safe for now
+    def fit(self, X, y, sample_weight=None, ordinal_fitted=False):
         if issparse(y):
             raise ValueError("sparse multilabel-indicator for y is not supported.")
             
@@ -296,8 +294,7 @@ class OrdinalForestClassifier(ForestClassifier):
     
         random_state = check_random_state(self.random_state)
         
-        if not self.ordinal_fitted:
-            
+        if not ordinal_fitted:
             assert hasattr(self, "classes_") and self.n_outputs_ == 1, "y should be univariate."
             self.n_classes_ = self.n_classes_[0]
             self.classes_ = self.classes_[0]
@@ -368,8 +365,7 @@ class OrdinalForestClassifier(ForestClassifier):
             best_interval = np.stack([interval for score,interval in trees_pq]).mean(axis=0)
             self.best_z_interval = norm.ppf(best_interval)
             self.best_z_mapping = norm.ppf((best_interval[:-1] + best_interval[1:]) / 2)
-            self.ordinal_fitted = True
-            self.fit(X,y.ravel(),sample_weight)
+            self.fit(X,y.ravel(),sample_weight,ordinal_fitted=True)
         else:
             assert not self.warm_start, "warm_start not implemented yet for Ordinal Forest."
             if not self.warm_start or not hasattr(self, "estimators_"):
