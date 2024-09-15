@@ -1,6 +1,6 @@
 ## Ordinal Forests
 
-This package implements Random Forests for ordinal regression as described in Ordinal Forests (2019)<sup>[1],[2]</sup> in Python. In addition, an ordinal-specific loss function, the All-Thresholds Loss, is implemented (motivated by the Loss Function (All-Threshold Loss) for ordinal response variables<sup>[3]</sup>) as the z-scoring inherently being done by Ordinal Forests provide convenient thresholding for this loss.
+Implementation of Random Forests for ordinal regression as described in Ordinal Forests (2019)<sup>[1],[2]</sup> in Python. In addition, an ordinal-specific loss function, the All-Thresholds Loss, is implemented (motivated by the Loss Function (All-Threshold Loss) for ordinal response variables<sup>[3]</sup>) as the z-scoring inherently being done by Ordinal Forests provide convenient thresholding for this loss.
 
 
 Based on scikit-learn version 1.1.2<sup>[4]</sup>.
