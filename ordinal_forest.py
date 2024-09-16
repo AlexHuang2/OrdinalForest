@@ -195,6 +195,51 @@ class OrdinalForestClassifier(ForestClassifier):
         else:
             return all_proba
         
+    def predict_z(self, X):
+        """
+        [Taken from RandomForestRegressor]
+        
+        Predict z-score regression target for X.
+
+        The predicted regression target of an input sample is computed as the
+        mean predicted regression targets of the trees in the forest.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, its dtype will be converted to
+            ``dtype=np.float32``. If a sparse matrix is provided, it will be
+            converted into a sparse ``csr_matrix``.
+
+        Returns
+        -------
+        z : ndarray of shape (n_samples,) or (n_samples, n_outputs)
+            The predicted z-score values.
+        """
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X)
+
+        # Assign chunk of trees to jobs
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+
+        # avoid storing the output of every estimator by summing them here
+        if self.n_outputs_ > 1:
+            z_hat = np.zeros((X.shape[0], self.n_outputs_), dtype=np.float64)
+        else:
+            z_hat = np.zeros((X.shape[0]), dtype=np.float64)
+
+        # Parallel loop
+        lock = threading.Lock()
+        Parallel(n_jobs=n_jobs, verbose=self.verbose, require="sharedmem")(
+            delayed(_accumulate_prediction)(e.predict, X, [z_hat], lock)
+            for e in self.estimators_
+        )
+
+        z_hat /= len(self.estimators_)
+
+        return z_hat
+        
     def fit(self, X, y, sample_weight=None, ordinal_fitted=False):
         if issparse(y):
             raise ValueError("sparse multilabel-indicator for y is not supported.")
@@ -339,19 +384,23 @@ class OrdinalForestClassifier(ForestClassifier):
                     self._n_samples,
                     n_samples_bootstrap,
                 )
+                # print(X[unsampled_indices, :].shape)
+                # print(y[unsampled_indices].shape)
                 z_pred = self._get_oob_predictions(estimator, X[unsampled_indices, :])
+                # print(z_pred.shape)
                 # make sure this is correct
                 if self.oob_score=='all-threshold':
                     if not callable(getattr(self, 'all_threshold_loss', None)):
-                        def _all_threshold_loss(y,z_pred,z_interval=None):
+                        def _all_threshold_loss(y,z_pred,z_interval=None,eval_indices=None):
                             assert not (self.best_z_interval is None and z_interval is None), "Please either specify interval or fit to obtain best interval first"
+                            eval_indices = np.array([True]*y.shape[0]) if eval_indices is None else eval_indices
                             z_interval = self.best_z_interval if z_interval is None else z_interval
                             return np.maximum(0,
-                                              1+np.multiply(np.where(y[unsampled_indices, np.newaxis] < self.classes_, -1, 1),
+                                              1+np.multiply(np.where(y[eval_indices, np.newaxis] < self.classes_, -1, 1),
                                                             z_interval[:-1].reshape(1, -1) - z_pred.reshape(-1, 1))
-                                             ).sum(axis=1)
+                                             ).sum(axis=1).mean()
                         self.all_threshold_loss = _all_threshold_loss
-                    score = self.all_threshold_loss(y.squeeze(),z_pred.squeeze(),z_interval).mean()
+                    score = self.all_threshold_loss(y.squeeze(),z_pred.squeeze(),z_interval,unsampled_indices)
                 else:
                     if self.oob_score is None:
                         self.oob_score = accuracy_score
