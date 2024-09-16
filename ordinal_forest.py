@@ -391,16 +391,15 @@ class OrdinalForestClassifier(ForestClassifier):
                 # make sure this is correct
                 if self.oob_score=='all-threshold':
                     if not callable(getattr(self, 'all_threshold_loss', None)):
-                        def _all_threshold_loss(y,z_pred,z_interval=None,eval_indices=None):
+                        def _all_threshold_loss(y,z_pred,z_interval=None):
                             assert not (self.best_z_interval is None and z_interval is None), "Please either specify interval or fit to obtain best interval first"
-                            eval_indices = np.array([True]*y.shape[0]) if eval_indices is None else eval_indices
                             z_interval = self.best_z_interval if z_interval is None else z_interval
                             return np.maximum(0,
-                                              1+np.multiply(np.where(y[eval_indices, np.newaxis] < self.classes_, -1, 1),
+                                              1+np.multiply(np.where(y[:, np.newaxis] < self.classes_, -1, 1),
                                                             z_interval[:-1].reshape(1, -1) - z_pred.reshape(-1, 1))
                                              ).sum(axis=1).mean()
                         self.all_threshold_loss = _all_threshold_loss
-                    score = self.all_threshold_loss(y.squeeze(),z_pred.squeeze(),z_interval,unsampled_indices)
+                    score = self.all_threshold_loss(y[unsampled_indices].squeeze(),z_pred.squeeze(),z_interval)
                 else:
                     if self.oob_score is None:
                         self.oob_score = accuracy_score
