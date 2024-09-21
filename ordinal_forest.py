@@ -6,6 +6,7 @@ from itertools import permutations
 from random import sample
 import heapq
 import threading
+from collections import defaultdict
 
 from sklearn.ensemble._forest import ForestClassifier
 from sklearn.tree import DecisionTreeRegressor
@@ -23,7 +24,6 @@ from sklearn.utils import check_random_state
 from sklearn.exceptions import DataConversionWarning
 from sklearn.ensemble._forest import _partition_estimators
 
-# You might need to implement or import these functions if they're not available
 from sklearn.ensemble._forest import (
     _accumulate_prediction,
     _generate_unsampled_indices,
@@ -32,8 +32,18 @@ from sklearn.ensemble._forest import (
     MAX_INT,
 )
 
+class Sqdistlookuptable(defaultdict):
+    def __init__(self,n_classes):
+        self.n_classes = n_classes
+    def default_factory(self,key):
+        return sum((key[0][i]-key[1][i])**2 for i in range(self.n_classes))
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError( key )
+        else:
+            ret = self[key] = self.default_factory(key)
+            return ret
 class OrdinalForestClassifier(ForestClassifier):
-    
     def __init__(
         self,
         n_estimators=100,
@@ -106,29 +116,29 @@ class OrdinalForestClassifier(ForestClassifier):
         self.oob_score = 'all-threshold'
         # A hyperparameter for the selection of the next candidate score set
         self.n_perm = n_perm
-        
     def _ordinal_z(self,z,z_interval=None):
         z_interval = self.best_z_interval if z_interval is None else z_interval
         return (z.reshape(-1, 1) >= z_interval[:-1]).sum(axis=1) - 1
     def _generate_rankings(self,B_sets,levels,N_perm):
         levels = list(set(levels))
-        j = len(levels)
-        if B_sets>factorial(j):
+        n_classes = len(levels)
+        if B_sets>factorial(n_classes):
             rankings = list(permutations(levels))
             j_rankings = len(rankings)
             rankings = sample(rankings,j_rankings)
-            j_copies = floor(B_sets/factorial(j))-1
+            j_copies = floor(B_sets/factorial(n_classes))-1
             rankings *= j_copies + 1
             rankings += sample(rankings,B_sets%j_rankings)
         else:
             rankings = []
-            rankings.append(tuple(sample(levels,j)))
+            rankings.append(tuple(sample(levels,n_classes)))
+            rankings_to_sample = list(permutations(levels))
+            sqdistlookuptable = Sqdistlookuptable(n_classes)
             for k in range(1,B_sets):
-                candidate_rankings = sample(list(permutations(levels)),N_perm)
-                candidate_permutation = sorted(candidate_rankings, key=lambda X: sum((x0-x)**2 for x0,x in zip(rankings[-1],X)))[-1]
+                candidate_rankings = sample(rankings_to_sample,N_perm)
+                candidate_permutation = sorted(candidate_rankings, key=lambda X: sqdistlookuptable[(rankings[-1],X) if rankings[-1]<X else (X,rankings[-1])])[-1]
                 rankings.append(candidate_permutation)
         return rankings
-    # Can we optimize this by sampling differently?
     def _generate_z_intervals(self,rankings):
         j = len(rankings[0])
         B_sets = len(rankings)
@@ -178,9 +188,6 @@ class OrdinalForestClassifier(ForestClassifier):
             for j in np.atleast_1d(self.n_classes_)
         ]
         lock = threading.Lock()
-        # from random import sample
-        # display(X)
-        # display(set(sample(list(self.estimators_),1)[0].predict(X)))
         Parallel(n_jobs=n_jobs, verbose=self.verbose, require="sharedmem")(
             delayed(_accumulate_prediction
                    )(lambda X, *args, **kwargs: self.n_classes_ordinal_encode_[self._ordinal_z(e.predict(X))], X, all_proba, lock)
@@ -345,7 +352,9 @@ class OrdinalForestClassifier(ForestClassifier):
             self.classes_ = self.classes_[0]
             
             assert np.isin(y,np.arange(self.n_classes_)).all(), "Make sure y is univariate and ordered 0 to n-1, for the n classes in the sample." 
+            
             rankings = self._generate_rankings(self.B_sets,self.classes_,self.n_perm)
+            
             intervals = self._generate_z_intervals(rankings)
             self.z_intervals = norm.ppf(intervals)
             self.z_mappings = norm.ppf((intervals[:,:-1]+intervals[:,1:])/2)
@@ -384,11 +393,7 @@ class OrdinalForestClassifier(ForestClassifier):
                     self._n_samples,
                     n_samples_bootstrap,
                 )
-                # print(X[unsampled_indices, :].shape)
-                # print(y[unsampled_indices].shape)
                 z_pred = self._get_oob_predictions(estimator, X[unsampled_indices, :])
-                # print(z_pred.shape)
-                # make sure this is correct
                 if self.oob_score=='all-threshold':
                     if not callable(getattr(self, 'all_threshold_loss', None)):
                         def _all_threshold_loss(y,z_pred,z_interval=None):
